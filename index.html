@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sujet 5: Data Extraction App</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts - Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom spinner animation */
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        /* Custom animation for extracted data */
+        @keyframes fadeInSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .fade-in-slide-up {
+            animation: fadeInSlideUp 0.5s ease-out forwards;
+        }
+        /* Gradient background */
+        .bg-gradient-custom {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+<body class="bg-gradient-custom min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl p-8 md:p-12 w-full max-w-4xl transform transition-all duration-300 hover:scale-[1.01]">
+        <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-6 text-center">
+            <span class="text-purple-700">InternExtract:</span> Data Extraction from Job Offers
+        </h1>
+        <p class="text-gray-600 mb-8 text-center max-w-2xl mx-auto">
+            This application simulates the extraction of relevant data from job and internship offers using AI.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <!-- Job Offers Input Section -->
+            <div class="bg-gray-50 p-6 rounded-xl shadow-md border border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Job Offer Text</h2>
+                <textarea id="jobOfferInput"
+                          class="w-full h-48 p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-200 resize-y"
+                          placeholder="Paste your job offer text here..."
+                          spellcheck="false">
+Job Title: Software Engineer Intern
+
+Company: Tech Solutions Inc.
+Location: San Francisco, CA
+Type: Internship, Summer 2025
+
+About Us:
+Tech Solutions Inc. is a fast-growing startup focused on innovative cloud solutions. We are looking for passionate and driven individuals to join our engineering team for a summer internship.
+
+Responsibilities:
+- Develop and maintain web applications using React and Node.js.
+- Collaborate with senior engineers on system design.
+- Participate in code reviews and team meetings.
+- Write unit and integration tests.
+
+Requirements:
+- Currently pursuing a Bachelor's or Master's degree in Computer Science or a related field.
+- Strong understanding of JavaScript, HTML, and CSS.
+- Experience with React, Node.js, or Python is a plus.
+- Excellent problem-solving skills and attention to detail.
+- Ability to work effectively in a team environment.
+
+Benefits:
+- Competitive intern salary.
+- Mentorship from experienced engineers.
+- Opportunity to work on real-world projects.
+- Free lunch and snacks.
+- Potential for full-time offer upon graduation.
+
+Apply by: March 31, 2025
+                </textarea>
+                <div class="text-sm text-gray-500 mt-2">
+                    Paste a job offer and click 'Extract Data' to see the simulated extraction.
+                </div>
+            </div>
+
+            <!-- Extracted Data Output Section -->
+            <div class="bg-gray-50 p-6 rounded-xl shadow-md border border-gray-200 flex flex-col">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Extracted Data</h2>
+                <div id="extractedDataOutput" class="flex-grow bg-white p-4 rounded-lg border border-gray-300 overflow-auto text-gray-800 text-sm">
+                    <p class="text-gray-500 italic">Extracted information will appear here...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Button and Loading Indicator -->
+        <div class="flex flex-col items-center">
+            <button id="extractButton"
+                    class="bg-purple-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-purple-700 focus:outline-none focus:ring-4 focus:ring-purple-300 transition-all duration-300 transform hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                <svg id="buttonIcon" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                </svg>
+                <span id="buttonText">Extract Data</span>
+            </button>
+
+            <div id="processingIndicator" class="hidden mt-4 flex items-center text-gray-600">
+                <svg class="spinner w-5 h-5 mr-2 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.001 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Processing...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const jobOfferInput = document.getElementById('jobOfferInput');
+            const extractedDataOutput = document.getElementById('extractedDataOutput');
+            const extractButton = document.getElementById('extractButton');
+            const buttonText = document.getElementById('buttonText');
+            const buttonIcon = document.getElementById('buttonIcon');
+            const processingIndicator = document.getElementById('processingIndicator');
+
+            // Simulate data extraction
+            const simulateExtraction = (text) => {
+                const extracted = {};
+
+                // Simple regex-based extraction for demonstration
+                const titleMatch = text.match(/Job Title:\s*(.*)/i);
+                if (titleMatch) extracted['Job Title'] = titleMatch[1].trim();
+
+                const companyMatch = text.match(/Company:\s*(.*)/i);
+                if (companyMatch) extracted['Company'] = companyMatch[1].trim();
+
+                const locationMatch = text.match(/Location:\s*(.*)/i);
+                if (locationMatch) extracted['Location'] = locationMatch[1].trim();
+
+                const typeMatch = text.match(/Type:\s*(.*)/i);
+                if (typeMatch) extracted['Type'] = typeMatch[1].trim();
+
+                const responsibilitiesMatch = text.match(/Responsibilities:\s*([\s\S]*?)(?=Requirements:|$)/i);
+                if (responsibilitiesMatch) {
+                    extracted['Responsibilities'] = responsibilitiesMatch[1].trim().split('\n').filter(line => line.trim() !== '').map(line => line.replace(/^-/, '').trim());
+                }
+
+                const requirementsMatch = text.match(/Requirements:\s*([\s\S]*?)(?=Benefits:|$)/i);
+                if (requirementsMatch) {
+                    extracted['Requirements'] = requirementsMatch[1].trim().split('\n').filter(line => line.trim() !== '').map(line => line.replace(/^-/, '').trim());
+                }
+
+                const benefitsMatch = text.match(/Benefits:\s*([\s\S]*?)(?=Apply by:|$)/i);
+                if (benefitsMatch) {
+                    extracted['Benefits'] = benefitsMatch[1].trim().split('\n').filter(line => line.trim() !== '').map(line => line.replace(/^-/, '').trim());
+                }
+
+                const applyByMatch = text.match(/Apply by:\s*(.*)/i);
+                if (applyByMatch) extracted['Apply by'] = applyByMatch[1].trim();
+
+
+                return extracted;
+            };
+
+            extractButton.addEventListener('click', () => {
+                const jobOfferText = jobOfferInput.value;
+
+                // Show processing indicator and disable button
+                buttonText.textContent = 'Processing...';
+                buttonIcon.classList.add('hidden'); // Hide arrow icon
+                processingIndicator.classList.remove('hidden');
+                extractButton.disabled = true;
+
+                // Clear previous output and add a placeholder
+                extractedDataOutput.innerHTML = '<p class="text-gray-500 italic">Extracting data...</p>';
+                extractedDataOutput.classList.remove('fade-in-slide-up'); // Reset animation
+
+                // Simulate AI processing delay
+                setTimeout(() => {
+                    const extractedData = simulateExtraction(jobOfferText);
+                    let outputHtml = '';
+
+                    if (Object.keys(extractedData).length > 0) {
+                        for (const key in extractedData) {
+                            if (extractedData.hasOwnProperty(key)) {
+                                outputHtml += `<p class="mb-2"><strong class="text-purple-700">${key}:</strong> `;
+                                if (Array.isArray(extractedData[key])) {
+                                    outputHtml += `<ul class="list-disc list-inside ml-4">`;
+                                    extractedData[key].forEach(item => {
+                                        outputHtml += `<li>${item}</li>`;
+                                    });
+                                    outputHtml += `</ul>`;
+                                } else {
+                                    outputHtml += `${extractedData[key]}`;
+                                }
+                                outputHtml += `</p>`;
+                            }
+                        }
+                    } else {
+                        outputHtml = '<p class="text-red-500">No data extracted. Please check the input format.</p>';
+                    }
+
+                    extractedDataOutput.innerHTML = outputHtml;
+                    extractedDataOutput.classList.add('fade-in-slide-up'); // Apply animation
+
+                    // Reset button and hide indicator
+                    buttonText.textContent = 'Extract Data';
+                    buttonIcon.classList.remove('hidden'); // Show arrow icon
+                    processingIndicator.classList.add('hidden');
+                    extractButton.disabled = false;
+                }, 2000); // Simulate 2 seconds of processing
+            });
+        });
+    </script>
+</body>
+</html>
