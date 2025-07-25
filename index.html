@@ -3,11 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sujet 5: Data Extraction App</title>
+    <title>InternExtract: Data Extraction App</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts - Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- PDF.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Set the workerSrc for pdf.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -42,6 +48,42 @@
         .bg-gradient-custom {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
+        /* Custom modal styles */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1000; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            width: 80%;
+            max-width: 500px;
+            text-align: center;
+        }
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="bg-gradient-custom min-h-screen flex items-center justify-center p-4">
@@ -51,16 +93,16 @@
             <span class="text-purple-700">InternExtract:</span> Data Extraction from Job Offers
         </h1>
         <p class="text-gray-600 mb-8 text-center max-w-2xl mx-auto">
-            This application simulates the extraction of relevant data from job and internship offers using AI.
+            This application extracts relevant data from job and internship offers using the Gemini AI. You can either paste text or upload a PDF.
         </p>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
             <!-- Job Offers Input Section -->
             <div class="bg-gray-50 p-6 rounded-xl shadow-md border border-gray-200">
-                <h2 class="text-xl font-semibold text-gray-700 mb-4">Job Offer Text</h2>
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Job Offer Text or PDF</h2>
                 <textarea id="jobOfferInput"
                           class="w-full h-48 p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-200 resize-y"
-                          placeholder="Paste your job offer text here..."
+                          placeholder="Paste your job offer text here, or upload a PDF..."
                           spellcheck="false">
 Job Title: Software Engineer Intern
 
@@ -93,8 +135,15 @@ Benefits:
 
 Apply by: March 31, 2025
                 </textarea>
-                <div class="text-sm text-gray-500 mt-2">
-                    Paste a job offer and click 'Extract Data' to see the simulated extraction.
+                <div class="flex items-center justify-center mt-4">
+                    <label for="pdfUploadInput" class="cursor-pointer bg-blue-600 text-white font-bold py-2 px-6 rounded-full shadow-md hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0">
+                        Upload PDF
+                    </label>
+                    <input type="file" id="pdfUploadInput" accept=".pdf" class="hidden">
+                    <span id="fileNameDisplay" class="ml-3 text-gray-600 text-sm italic">No file chosen</span>
+                </div>
+                <div class="text-sm text-gray-500 mt-2 text-center">
+                    Upload a PDF or paste text, then click 'Extract Data'.
                 </div>
             </div>
 
@@ -127,56 +176,99 @@ Apply by: March 31, 2025
         </div>
     </div>
 
+    <!-- Custom Modal for Messages -->
+    <div id="messageModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="closeModalButton">&times;</span>
+            <p id="modalMessage" class="text-lg text-gray-800"></p>
+            <button id="modalOkButton" class="mt-4 bg-purple-600 text-white font-bold py-2 px-6 rounded-full hover:bg-purple-700 focus:outline-none focus:ring-4 focus:ring-purple-300 transition-all duration-200">OK</button>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const jobOfferInput = document.getElementById('jobOfferInput');
+            const pdfUploadInput = document.getElementById('pdfUploadInput');
+            const fileNameDisplay = document.getElementById('fileNameDisplay');
             const extractedDataOutput = document.getElementById('extractedDataOutput');
             const extractButton = document.getElementById('extractButton');
             const buttonText = document.getElementById('buttonText');
             const buttonIcon = document.getElementById('buttonIcon');
             const processingIndicator = document.getElementById('processingIndicator');
+            const messageModal = document.getElementById('messageModal');
+            const modalMessage = document.getElementById('modalMessage');
+            const closeModalButton = document.getElementById('closeModalButton');
+            const modalOkButton = document.getElementById('modalOkButton');
 
-            // Simulate data extraction
-            const simulateExtraction = (text) => {
-                const extracted = {};
-
-                // Simple regex-based extraction for demonstration
-                const titleMatch = text.match(/Job Title:\s*(.*)/i);
-                if (titleMatch) extracted['Job Title'] = titleMatch[1].trim();
-
-                const companyMatch = text.match(/Company:\s*(.*)/i);
-                if (companyMatch) extracted['Company'] = companyMatch[1].trim();
-
-                const locationMatch = text.match(/Location:\s*(.*)/i);
-                if (locationMatch) extracted['Location'] = locationMatch[1].trim();
-
-                const typeMatch = text.match(/Type:\s*(.*)/i);
-                if (typeMatch) extracted['Type'] = typeMatch[1].trim();
-
-                const responsibilitiesMatch = text.match(/Responsibilities:\s*([\s\S]*?)(?=Requirements:|$)/i);
-                if (responsibilitiesMatch) {
-                    extracted['Responsibilities'] = responsibilitiesMatch[1].trim().split('\n').filter(line => line.trim() !== '').map(line => line.replace(/^-/, '').trim());
-                }
-
-                const requirementsMatch = text.match(/Requirements:\s*([\s\S]*?)(?=Benefits:|$)/i);
-                if (requirementsMatch) {
-                    extracted['Requirements'] = requirementsMatch[1].trim().split('\n').filter(line => line.trim() !== '').map(line => line.replace(/^-/, '').trim());
-                }
-
-                const benefitsMatch = text.match(/Benefits:\s*([\s\S]*?)(?=Apply by:|$)/i);
-                if (benefitsMatch) {
-                    extracted['Benefits'] = benefitsMatch[1].trim().split('\n').filter(line => line.trim() !== '').map(line => line.replace(/^-/, '').trim());
-                }
-
-                const applyByMatch = text.match(/Apply by:\s*(.*)/i);
-                if (applyByMatch) extracted['Apply by'] = applyByMatch[1].trim();
-
-
-                return extracted;
+            // Function to show custom modal
+            const showMessage = (message) => {
+                modalMessage.textContent = message;
+                messageModal.style.display = 'flex'; // Use flex to center content
             };
 
-            extractButton.addEventListener('click', () => {
-                const jobOfferText = jobOfferInput.value;
+            // Function to hide custom modal
+            const hideMessage = () => {
+                messageModal.style.display = 'none';
+            };
+
+            // Event listeners for modal close
+            closeModalButton.addEventListener('click', hideMessage);
+            modalOkButton.addEventListener('click', hideMessage);
+            window.addEventListener('click', (event) => {
+                if (event.target === messageModal) {
+                    hideMessage();
+                }
+            });
+
+            // Handle PDF file selection
+            pdfUploadInput.addEventListener('change', async (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    fileNameDisplay.textContent = file.name;
+                    jobOfferInput.value = 'Loading PDF content...';
+                    extractedDataOutput.innerHTML = '<p class="text-gray-500 italic">Processing PDF...</p>';
+                    extractButton.disabled = true; // Disable button during PDF processing
+                    processingIndicator.classList.remove('hidden');
+
+                    try {
+                        const reader = new FileReader();
+                        reader.onload = async (e) => {
+                            const arrayBuffer = e.target.result;
+                            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                            let fullText = '';
+                            for (let i = 1; i <= pdf.numPages; i++) {
+                                const page = await pdf.getPage(i);
+                                const textContent = await page.getTextContent();
+                                fullText += textContent.items.map(item => item.str).join(' ') + '\n';
+                            }
+                            jobOfferInput.value = fullText.trim();
+                            extractedDataOutput.innerHTML = '<p class="text-gray-500 italic">PDF content loaded. Click Extract Data.</p>';
+                        };
+                        reader.readAsArrayBuffer(file);
+                    } catch (error) {
+                        console.error('Error reading PDF:', error);
+                        showMessage('Failed to read PDF file. Please ensure it\'s a valid PDF.');
+                        jobOfferInput.value = ''; // Clear input on error
+                        fileNameDisplay.textContent = 'No file chosen';
+                        extractedDataOutput.innerHTML = '<p class="text-red-500">Error processing PDF.</p>';
+                    } finally {
+                        extractButton.disabled = false; // Re-enable button
+                        processingIndicator.classList.add('hidden');
+                    }
+                } else {
+                    fileNameDisplay.textContent = 'No file chosen';
+                    jobOfferInput.value = ''; // Clear textarea if no file selected
+                    extractedDataOutput.innerHTML = '<p class="text-gray-500 italic">Extracted information will appear here...</p>';
+                }
+            });
+
+            extractButton.addEventListener('click', async () => {
+                const jobOfferText = jobOfferInput.value.trim();
+
+                if (!jobOfferText || jobOfferText === 'Loading PDF content...') {
+                    showMessage('Please paste or upload a job offer text/PDF to extract data.');
+                    return;
+                }
 
                 // Show processing indicator and disable button
                 buttonText.textContent = 'Processing...';
@@ -185,43 +277,119 @@ Apply by: March 31, 2025
                 extractButton.disabled = true;
 
                 // Clear previous output and add a placeholder
-                extractedDataOutput.innerHTML = '<p class="text-gray-500 italic">Extracting data...</p>';
+                extractedDataOutput.innerHTML = '<p class="text-gray-500 italic">Extracting data using Gemini AI...</p>';
                 extractedDataOutput.classList.remove('fade-in-slide-up'); // Reset animation
 
-                // Simulate AI processing delay
-                setTimeout(() => {
-                    const extractedData = simulateExtraction(jobOfferText);
-                    let outputHtml = '';
+                try {
+                    let chatHistory = [];
+                    const prompt = `Extract the following information from the job offer text and return it as a JSON object. If a field is not found, use "N/A".
+                    
+                    Job Offer Text:
+                    "${jobOfferText}"
 
-                    if (Object.keys(extractedData).length > 0) {
-                        for (const key in extractedData) {
-                            if (extractedData.hasOwnProperty(key)) {
-                                outputHtml += `<p class="mb-2"><strong class="text-purple-700">${key}:</strong> `;
-                                if (Array.isArray(extractedData[key])) {
-                                    outputHtml += `<ul class="list-disc list-inside ml-4">`;
-                                    extractedData[key].forEach(item => {
-                                        outputHtml += `<li>${item}</li>`;
-                                    });
-                                    outputHtml += `</ul>`;
-                                } else {
-                                    outputHtml += `${extractedData[key]}`;
-                                }
-                                outputHtml += `</p>`;
+                    Expected JSON fields:
+                    - jobTitle (string)
+                    - company (string)
+                    - location (string)
+                    - type (string, e.g., "Internship", "Full-time")
+                    - responsibilities (array of strings, list each responsibility)
+                    - requirements (array of strings, list each requirement)
+                    - benefits (array of strings, list each benefit)
+                    - applyBy (string, e.g., "March 31, 2025")
+                    `;
+
+                    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+                    const payload = {
+                        contents: chatHistory,
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            responseSchema: {
+                                type: "OBJECT",
+                                properties: {
+                                    "jobTitle": { "type": "STRING" },
+                                    "company": { "type": "STRING" },
+                                    "location": { "type": "STRING" },
+                                    "type": { "type": "STRING" },
+                                    "responsibilities": {
+                                        "type": "ARRAY",
+                                        "items": { "type": "STRING" }
+                                    },
+                                    "requirements": {
+                                        "type": "ARRAY",
+                                        "items": { "type": "STRING" }
+                                    },
+                                    "benefits": {
+                                        "type": "ARRAY",
+                                        "items": { "type": "STRING" }
+                                    },
+                                    "applyBy": { "type": "STRING" }
+                                },
+                                "propertyOrdering": ["jobTitle", "company", "location", "type", "responsibilities", "requirements", "benefits", "applyBy"]
                             }
                         }
+                    };
+
+                    const apiKey = "AIzaSyAGw_CV8nztLkVwJrMfStNklLfgvYSXU4Q"; // This will be automatically provided by the Canvas environment
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+
+                    let outputHtml = '';
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const jsonString = result.candidates[0].content.parts[0].text;
+                        const extractedData = JSON.parse(jsonString);
+
+                        if (Object.keys(extractedData).length > 0) {
+                            for (const key in extractedData) {
+                                if (extractedData.hasOwnProperty(key)) {
+                                    outputHtml += `<p class="mb-2"><strong class="text-purple-700">${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</strong> `; // Format key for display
+                                    if (Array.isArray(extractedData[key])) {
+                                        if (extractedData[key].length > 0) {
+                                            outputHtml += `<ul class="list-disc list-inside ml-4">`;
+                                            extractedData[key].forEach(item => {
+                                                outputHtml += `<li>${item}</li>`;
+                                            });
+                                            outputHtml += `</ul>`;
+                                        } else {
+                                            outputHtml += `N/A`;
+                                        }
+                                    } else {
+                                        outputHtml += `${extractedData[key]}`;
+                                    }
+                                    outputHtml += `</p>`;
+                                }
+                            }
+                        } else {
+                            outputHtml = '<p class="text-red-500">No data extracted or empty response from AI.</p>';
+                        }
                     } else {
-                        outputHtml = '<p class="text-red-500">No data extracted. Please check the input format.</p>';
+                        outputHtml = '<p class="text-red-500">Failed to get a valid response from the AI. Please try again.</p>';
+                        console.error("AI response structure unexpected:", result);
                     }
 
                     extractedDataOutput.innerHTML = outputHtml;
                     extractedDataOutput.classList.add('fade-in-slide-up'); // Apply animation
 
+                } catch (error) {
+                    console.error('Error extracting data:', error);
+                    extractedDataOutput.innerHTML = '<p class="text-red-500">An error occurred during data extraction. Please try again later.</p>';
+                    showMessage('An error occurred during data extraction. Please check your network connection or try again later.');
+                } finally {
                     // Reset button and hide indicator
                     buttonText.textContent = 'Extract Data';
                     buttonIcon.classList.remove('hidden'); // Show arrow icon
                     processingIndicator.classList.add('hidden');
                     extractButton.disabled = false;
-                }, 2000); // Simulate 2 seconds of processing
+                }
             });
         });
     </script>
