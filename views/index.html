@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InternExtract: Data Extraction App</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts - Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- PDF.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib = window['pdfjs-dist/build/pdf'];
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <!-- jsPDF CDN for creating PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Expose Firebase services to the global scope for mainController.js
+        window.firebase = {
+            initializeApp,
+            getAuth,
+            signInAnonymously,
+            onAuthStateChanged,
+            signInWithCustomToken,
+            getFirestore,
+            collection,
+            addDoc,
+            onSnapshot,
+            query,
+            serverTimestamp,
+            doc, 
+            setDoc
+        };
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes fadeInSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .fade-in-slide-up {
+            animation: fadeInSlideUp 0.5s ease-out forwards;
+        }
+        .bg-gradient-custom {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            width: 80%;
+            max-width: 500px;
+            text-align: center;
+        }
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-gradient-custom min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl p-8 md:p-12 w-full max-w-4xl transform transition-all duration-300 hover:scale-[1.01]">
+        <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-6 text-center">
+            <span class="text-purple-700">InternExtract:</span> Data Extraction from Job Offers
+        </h1>
+        <p class="text-gray-600 mb-8 text-center max-w-2xl mx-auto">
+            This application extracts relevant data from job and internship offers using the Gemini AI. You can either paste text or upload a PDF.
+        </p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 my-8">
+            <!-- Job Offers Input Section -->
+            <div class="bg-gray-50 p-6 rounded-xl shadow-md border border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Job Offer Text or PDF</h2>
+                <textarea id="jobOfferInput"
+                          class="w-full h-48 p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-200 resize-y"
+                          placeholder="Paste your job offer text here, or upload a PDF..."
+                          spellcheck="false"></textarea>
+                <div class="flex items-center justify-center mt-4">
+                    <label for="pdfUploadInput"
+                           class="cursor-pointer bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold shadow-lg hover:bg-blue-700 transition-colors duration-200">
+                        <span id="uploadButtonText">Upload PDF</span>
+                        <input type="file" id="pdfUploadInput" accept=".pdf" class="hidden">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Output Section -->
+            <div class="bg-gray-50 p-6 rounded-xl shadow-md border border-gray-200 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">Extracted Data</h2>
+                    <div id="extractedDataOutput"
+                         class="bg-white p-4 rounded-lg border border-gray-300 h-48 overflow-y-auto custom-scrollbar">
+                        <p class="text-gray-500">Extracted data will appear here...</p>
+                    </div>
+                </div>
+                <div class="flex flex-col sm:flex-row mt-4 gap-4">
+                    <button id="extractButton"
+                            class="flex-1 bg-purple-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-purple-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span id="buttonText">Extract Data</span>
+                        <svg id="buttonIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                        <svg id="processingIndicator" class="spinner h-5 w-5 text-white ml-2 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </button>
+                    <button id="exportPdfButton"
+                            class="flex-1 bg-gray-500 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-gray-600 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Export as PDF
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex flex-col sm:flex-row mt-4 gap-4">
+                    <button id="saveDataButton"
+                            class="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Save Extracted Data
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 5a2 2 0 012-2h2a2 2 0 012 2H4zm-1 9a1 1 0 000 2h14a1 1 0 100-2H3zm-1 4a2 2 0 012-2h14a2 2 0 012 2H2zm16-7a1 1 0 000 2h-1a1 1 0 100-2h1z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Saved Data Section -->
+        <div class="mt-8 p-6 bg-gray-50 rounded-xl shadow-md border border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Previously Saved Job Offers</h2>
+            <div id="savedDataContainer" class="bg-white p-4 rounded-lg border border-gray-300 max-h-64 overflow-y-auto">
+                <p class="text-gray-500">Loading saved data...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- The Modal HTML for messages -->
+    <div id="messageModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <p id="modalMessage" class="text-gray-700"></p>
+        </div>
+    </div>
+
+    <!-- The JavaScript entry point -->
+    <script type="module" src="../controllers/mainController.js"></script>
+
+</body>
+</html>
