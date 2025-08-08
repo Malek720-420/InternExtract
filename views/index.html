@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts - Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" xintegrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ96eC68A6b6a2f4sX7g9+096e+P062u2g08Jb2a+P062e2w+P062e2w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <!-- PDF.js CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
@@ -16,10 +18,12 @@
     </script>
     <!-- jsPDF CDN for creating PDFs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Chart.js CDN for visual data -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, doc, setDoc, deleteDoc, updateDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // Expose Firebase services to the global scope for mainController.js
         window.firebase = {
@@ -35,13 +39,18 @@
             query,
             serverTimestamp,
             doc, 
-            setDoc
+            setDoc,
+            deleteDoc,
+            updateDoc,
+            getDocs,
+            writeBatch
         };
     </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
         }
+        /* Custom spinner animation */
         @keyframes spin {
             from {
                 transform: rotate(0deg);
@@ -104,95 +113,273 @@
             text-decoration: none;
             cursor: pointer;
         }
+
+        /* Dark mode styles */
+        .dark .bg-gray-100 { background-color: #1a202c; }
+        .dark .bg-white { background-color: #2d3748; }
+        .dark .bg-gray-50 { background-color: #1a202c; }
+        .dark .text-gray-800 { color: #e2e8f0; }
+        .dark .text-gray-700 { color: #cbd5e0; }
+        .dark .text-gray-600 { color: #a0aec0; }
+        .dark .border-gray-200 { border-color: #4a5568; }
+        .dark .border-gray-300 { border-color: #4a5568; }
+        .dark #jobOfferInput, .dark #savedDataContainer {
+            background-color: #4a5568;
+            color: #e2e8f0;
+        }
+        .dark #jobOfferInput::placeholder {
+            color: #a0aec0;
+        }
+        .dark #nav-extraction:not(.bg-purple-600) {
+            background-color: #2d3748;
+            color: #cbd5e0;
+        }
+        .dark #nav-saved-jobs:hover, .dark #nav-comparison:hover {
+            background-color: #4a5568;
+        }
+        .dark #theme-toggle:hover {
+            background-color: #4a5568;
+        }
+        .dark #searchSavedData {
+            background-color: #4a5568;
+            color: #e2e8f0;
+        }
+        .dark .modal-content {
+            background-color: #2d3748;
+        }
+        .dark .close-button {
+            color: #e2e8f0;
+        }
+        .dark .close-button:hover,
+        .dark .close-button:focus {
+            color: #cbd5e0;
+        }
     </style>
 </head>
-<body class="bg-gradient-custom min-h-screen flex items-center justify-center p-4">
+<body class="bg-gray-100 font-sans text-gray-800 antialiased flex transition-colors duration-300">
 
-    <div class="bg-white rounded-2xl shadow-xl p-8 md:p-12 w-full max-w-4xl transform transition-all duration-300 hover:scale-[1.01]">
-        <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-6 text-center">
-            <span class="text-purple-700">InternExtract:</span> Data Extraction from Job Offers
-        </h1>
-        <p class="text-gray-600 mb-8 text-center max-w-2xl mx-auto">
-            This application extracts relevant data from job and internship offers using the Gemini AI. You can either paste text or upload a PDF.
-        </p>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 my-8">
-            <!-- Job Offers Input Section -->
-            <div class="bg-gray-50 p-6 rounded-xl shadow-md border border-gray-200">
-                <h2 class="text-xl font-semibold text-gray-700 mb-4">Job Offer Text or PDF</h2>
-                <textarea id="jobOfferInput"
-                          class="w-full h-48 p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-200 resize-y"
-                          placeholder="Paste your job offer text here, or upload a PDF..."
-                          spellcheck="false"></textarea>
-                <div class="flex items-center justify-center mt-4">
-                    <label for="pdfUploadInput"
-                           class="cursor-pointer bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold shadow-lg hover:bg-blue-700 transition-colors duration-200">
-                        <span id="uploadButtonText">Upload PDF</span>
-                        <input type="file" id="pdfUploadInput" accept=".pdf" class="hidden">
-                    </label>
-                </div>
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white dark:bg-gray-800 shadow-xl p-6 flex flex-col justify-between h-screen sticky top-0 transition-colors duration-300">
+        <div>
+            <div class="flex items-center justify-center mb-12">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-10 w-10 text-purple-600 transition-colors duration-200">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <circle cx="10" cy="14" r="3"></circle>
+                    <path d="M12.5 16.5l3.5 3.5"></path>
+                </svg>
+                <span class="text-3xl font-bold text-gray-800 dark:text-gray-200 ml-3">InternExtract</span>
             </div>
+            <nav class="space-y-4">
+                <button id="nav-extraction" class="flex items-center w-full px-4 py-3 rounded-lg text-lg font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors duration-200">
+                    <i class="fas fa-file-invoice mr-3 w-6 text-center"></i>
+                    Extraction
+                </button>
+                <button id="nav-saved-jobs" class="flex items-center w-full px-4 py-3 rounded-lg text-lg font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200">
+                    <i class="fas fa-bookmark mr-3 w-6 text-center"></i>
+                    Saved Jobs
+                </button>
+                <button id="nav-comparison" class="flex items-center w-full px-4 py-3 rounded-lg text-lg font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200">
+                    <i class="fas fa-chart-pie mr-3 w-6 text-center"></i>
+                    Compatibility Analysis
+                </button>
+            </nav>
+        </div>
+        
+        <!-- Bottom section for theme toggle and reset -->
+        <div>
+            <button id="theme-toggle" class="flex items-center w-full px-4 py-3 rounded-lg text-lg font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 mb-4">
+                <i id="theme-toggle-icon" class="fas fa-sun mr-3 w-6 text-center"></i>
+                <span id="theme-toggle-text">Light Theme</span>
+            </button>
+            <button id="reset-app-button" class="flex items-center w-full px-4 py-3 rounded-lg text-lg font-semibold text-red-600 hover:bg-red-100 dark:hover:bg-red-900 transition-colors duration-200">
+                <i class="fas fa-trash-alt mr-3 w-6 text-center"></i>
+                Reset App
+            </button>
+        </div>
+    </aside>
 
-            <!-- Output Section -->
-            <div class="bg-gray-50 p-6 rounded-xl shadow-md border border-gray-200 flex flex-col justify-between">
-                <div>
-                    <h2 class="text-xl font-semibold text-gray-700 mb-4">Extracted Data</h2>
-                    <div id="extractedDataOutput"
-                         class="bg-white p-4 rounded-lg border border-gray-300 h-48 overflow-y-auto custom-scrollbar">
-                        <p class="text-gray-500">Extracted data will appear here...</p>
+    <!-- Main Content Area -->
+    <main class="flex-1 p-8 overflow-y-auto">
+
+        <!-- Extraction View (Default) -->
+        <section id="extraction-view" class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 md:p-12 w-full transition-all duration-300">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800 dark:text-gray-200 mb-6 text-center">
+                <span class="text-purple-700">InternExtract:</span> Data Extraction from Job Offers
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400 mb-8 text-center max-w-2xl mx-auto">
+                This application extracts relevant data from job and internship offers using the Gemini AI. You can either paste text or upload a PDF.
+            </p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 my-8">
+                <!-- Job Offers Input Section -->
+                <div class="bg-gray-50 dark:bg-gray-900 p-6 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+                    <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-4">Job Offer Text or PDF</h2>
+                    <textarea id="jobOfferInput"
+                              class="w-full h-48 p-4 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-200 resize-y bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                              placeholder="Paste your job offer text here, or upload a PDF..."
+                              spellcheck="false"></textarea>
+                    <div class="flex items-center justify-center mt-4">
+                        <label for="pdfUploadInput"
+                               class="cursor-pointer bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold shadow-lg hover:bg-blue-700 transition-colors duration-200">
+                            <span id="uploadButtonText">Upload PDF</span>
+                            <input type="file" id="pdfUploadInput" accept=".pdf" class="hidden">
+                        </label>
                     </div>
                 </div>
-                <div class="flex flex-col sm:flex-row mt-4 gap-4">
-                    <button id="extractButton"
-                            class="flex-1 bg-purple-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-purple-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
-                        <span id="buttonText">Extract Data</span>
-                        <svg id="buttonIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                        </svg>
-                        <svg id="processingIndicator" class="spinner h-5 w-5 text-white ml-2 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                    </button>
-                    <button id="exportPdfButton"
-                            class="flex-1 bg-gray-500 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-gray-600 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                        Export as PDF
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                    </button>
-                </div>
-                <div class="flex flex-col sm:flex-row mt-4 gap-4">
-                    <button id="saveDataButton"
-                            class="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                        Save Extracted Data
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 5a2 2 0 012-2h2a2 2 0 012 2H4zm-1 9a1 1 0 000 2h14a1 1 0 100-2H3zm-1 4a2 2 0 012-2h14a2 2 0 012 2H2zm16-7a1 1 0 000 2h-1a1 1 0 100-2h1z" />
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        </div>
 
-        <!-- Saved Data Section -->
-        <div class="mt-8 p-6 bg-gray-50 rounded-xl shadow-md border border-gray-200">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Previously Saved Job Offers</h2>
-            <div id="savedDataContainer" class="bg-white p-4 rounded-lg border border-gray-300 max-h-64 overflow-y-auto">
-                <p class="text-gray-500">Loading saved data...</p>
+                <!-- Output Section -->
+                <div class="bg-gray-50 dark:bg-gray-900 p-6 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 flex flex-col justify-between">
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-4">Extracted Data</h2>
+                        <div id="extractedDataOutput"
+                             class="bg-white dark:bg-gray-700 p-4 rounded-lg border border-gray-300 dark:border-gray-600 h-48 overflow-y-auto custom-scrollbar">
+                            <p class="text-gray-500 dark:text-gray-400">Extracted data will appear here...</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-col sm:flex-row mt-4 gap-4">
+                        <button id="extractButton"
+                                class="flex-1 bg-purple-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-purple-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span id="buttonText">Extract Data</span>
+                            <svg id="buttonIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                            </svg>
+                            <svg id="processingIndicator" class="spinner h-5 w-5 text-white ml-2 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="flex flex-col sm:flex-row mt-4 gap-4">
+                        <button id="saveDataButton"
+                                class="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                            Save Extracted Data
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 5a2 2 0 012-2h2a2 2 0 012 2H4zm-1 9a1 1 0 000 2h14a1 1 0 100-2H3zm-1 4a2 2 0 012-2h14a2 2 0 012 2H2zm16-7a1 1 0 000 2h-1a1 1 0 100-2h1z" />
+                            </svg>
+                        </button>
+                        <button id="exportPdfButton"
+                                class="flex-1 bg-gray-500 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-gray-600 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                            Export as PDF
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
+        </section>
+
+        <!-- Saved Jobs View (Hidden by default) -->
+        <section id="saved-jobs-view" class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 md:p-12 w-full hidden">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800 dark:text-gray-200 mb-6 text-center">
+                <span class="text-blue-700">Saved Jobs:</span> Your Personalized List
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400 mb-8 text-center max-w-2xl mx-auto">
+                Here are all the job offers you have saved. You can search, view, and delete them.
+            </p>
+            <div class="mt-8 p-6 bg-gray-50 dark:bg-gray-900 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+                <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-4">
+                    Previously Saved Job Offers
+                    <span class="text-sm text-gray-500 dark:text-gray-400 float-right" id="savedCount"></span>
+                </h2>
+                <input type="text" id="searchSavedData" placeholder="Search saved jobs..." class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-200 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+                <div id="savedDataContainer" class="bg-white dark:bg-gray-700 p-4 rounded-lg border border-gray-300 dark:border-gray-600 max-h-96 overflow-y-auto">
+                    <p class="text-gray-500 dark:text-gray-400">Loading saved data...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Compatibility Analysis View (Hidden by default) -->
+        <section id="comparison-view" class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 md:p-12 w-full hidden">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800 dark:text-gray-200 mb-6 text-center">
+                <span class="text-green-700">Compatibility Analysis</span>
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400 mb-8 text-center max-w-2xl mx-auto">
+                Compare your saved job offers and get an AI-generated conclusion on which one might be the best fit for you.
+            </p>
+            <div class="flex items-center justify-center my-6">
+                <button id="run-analysis-button" class="bg-green-600 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-lg hover:bg-green-700 transition-colors duration-200 flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span id="analysisButtonText">Run Compatibility Analysis</span>
+                    <i id="analysisButtonIcon" class="fas fa-sync-alt ml-3"></i>
+                    <svg id="analysisSpinner" class="spinner h-5 w-5 text-white ml-2 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="analysis-output" class="hidden mt-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="bg-gray-50 dark:bg-gray-900 p-6 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+                        <h3 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-4">Visual Comparison</h3>
+                        <div class="h-64">
+                             <canvas id="comparisonChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-900 p-6 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+                        <h3 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-4">AI Conclusion</h3>
+                        <div id="aiConclusion" class="text-gray-600 dark:text-gray-400 prose-sm h-64 overflow-y-auto">
+                            <!-- AI-generated conclusion will be rendered here -->
+                            <p class="text-gray-500 dark:text-gray-400">Run the analysis to see the conclusion...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
 
     <!-- The Modal HTML for messages -->
     <div id="messageModal" class="modal">
-        <div class="modal-content">
-            <span class="close-button">&times;</span>
-            <p id="modalMessage" class="text-gray-700"></p>
+        <div class="modal-content bg-white dark:bg-gray-800 transition-colors duration-300">
+            <span class="close-button text-gray-700 dark:text-gray-300">&times;</span>
+            <p id="modalMessage" class="text-gray-700 dark:text-gray-300"></p>
+            <div id="modalButtons" class="mt-4 flex justify-center space-x-4 hidden">
+                <button id="modalConfirmBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">Confirm</button>
+                <button id="modalCancelBtn" class="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500 transition-colors">Cancel</button>
+            </div>
         </div>
     </div>
 
     <!-- The JavaScript entry point -->
     <script type="module" src="../controllers/mainController.js"></script>
 
+    <!-- Theme Toggle Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const themeToggle = document.getElementById('theme-toggle');
+            const themeToggleIcon = document.getElementById('theme-toggle-icon');
+            const themeToggleText = document.getElementById('theme-toggle-text');
+            const html = document.documentElement;
+
+            // Check for saved theme preference in local storage
+            const currentTheme = localStorage.getItem('theme');
+            if (currentTheme === 'dark') {
+                html.classList.add('dark');
+                themeToggleIcon.classList.replace('fa-sun', 'fa-moon');
+                themeToggleText.textContent = 'Dark Theme';
+            } else {
+                html.classList.remove('dark');
+                themeToggleIcon.classList.replace('fa-moon', 'fa-sun');
+                themeToggleText.textContent = 'Light Theme';
+            }
+
+            themeToggle.addEventListener('click', () => {
+                // Toggle the 'dark' class on the HTML element
+                html.classList.toggle('dark');
+
+                // Update the icon and text based on the new theme
+                if (html.classList.contains('dark')) {
+                    themeToggleIcon.classList.replace('fa-sun', 'fa-moon');
+                    themeToggleText.textContent = 'Dark Theme';
+                    localStorage.setItem('theme', 'dark');
+                } else {
+                    themeToggleIcon.classList.replace('fa-moon', 'fa-sun');
+                    themeToggleText.textContent = 'Light Theme';
+                    localStorage.setItem('theme', 'light');
+                }
+            });
+        });
+    </script>
 </body>
 </html>
